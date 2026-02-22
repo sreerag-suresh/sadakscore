@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── NextAuth models ──────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── App models ───────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CITIZEN
+  CONTRACTOR
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(CITIZEN)
+
+  accounts  Account[]
+  sessions  Session[]
+  ratings   Rating[]
+  disputes  Dispute[]
+
+  createdAt DateTime @default(now())
+}
+
+model Contractor {
+  id           String  @id @default(cuid())
+  name         String
+  license      String  @unique
+  description  String?
+  logoUrl      String?
+  contactEmail String?
+  website      String?
+
+  sections RoadSection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RoadSection {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  latitude    Float?
+  longitude   Float?
+  city        String?
+  district    String?
+
+  contractorId String?
+  contractor   Contractor? @relation(fields: [contractorId], references: [id])
+
+  ratings      Rating[]
+  avgScore     Float?
+  totalRatings Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Rating {
+  id        String @id @default(cuid())
+  userId    String
+  sectionId String
+
+  // Score 1–5 (1 = terrible, 5 = excellent)
+  score     Int
+  photoUrl  String?
+  latitude  Float?
+  longitude Float?
+  notes     String?
+
+  user     User        @relation(fields: [userId], references: [id])
+  section  RoadSection @relation(fields: [sectionId], references: [id])
+  disputes Dispute[]
+
+  createdAt DateTime @default(now())
+}
+
+enum DisputeStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+model Dispute {
+  id       String @id @default(cuid())
+  ratingId String
+  userId   String
+  reason   String
+
+  status DisputeStatus @default(PENDING)
+
+  rating Rating @relation(fields: [ratingId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
