@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${dmSans.variable} ${dmMono.variable}`}>
-      <body className="min-h-screen bg-stone-50 font-sans text-stone-900 antialiased flex flex-col">
+      <body className="min-h-screen bg-white font-sans text-stone-900 antialiased flex flex-col">
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />

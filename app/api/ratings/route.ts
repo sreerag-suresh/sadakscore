@@ -7,10 +7,14 @@ import { db } from "@/lib/db";
 import { processUpload } from "@/lib/upload";
 
 const bodySchema = z.object({
-  // Accepts either a cuid (existing section) or a plain name (auto-creates section)
-  sectionName: z.string().min(1, "Section name is required").max(300),
-  score: z.coerce.number().int().min(1).max(5),
-  notes: z.string().max(1000).optional(),
+  state: z.string().min(1, "State is required").max(100),
+  district: z.string().min(1, "District is required").max(100),
+  roadType: z.string().min(1, "Road type is required").max(100),
+  roadName: z.string().min(1, "Road name is required").max(300),
+  section: z.string().max(300).optional(),
+  score: z.coerce.number().int().min(0).max(10),
+  notes: z.string().max(2000).optional(),
+  contractorName: z.string().max(300).optional(),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
 });
@@ -30,9 +34,14 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = bodySchema.safeParse({
-    sectionName: formData.get("sectionId"), // field name kept for form compat
+    state: formData.get("state"),
+    district: formData.get("district"),
+    roadType: formData.get("roadType"),
+    roadName: formData.get("roadName"),
+    section: formData.get("section") || undefined,
     score: formData.get("score"),
-    notes: formData.get("notes") ?? undefined,
+    notes: formData.get("notes") || undefined,
+    contractorName: formData.get("contractorName") || undefined,
     latitude: formData.get("latitude") ?? undefined,
     longitude: formData.get("longitude") ?? undefined,
   });
@@ -44,20 +53,42 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sectionName, score, notes, latitude, longitude } = parsed.data;
+  const { state, district, roadType, roadName, section, score, notes, contractorName, latitude, longitude } = parsed.data;
 
-  // Find existing section by name (case-insensitive) or create it on the fly
-  let section = await db.roadSection.findFirst({
+  // Build section name from roadName + section
+  const sectionName = section ? `${roadName} — ${section}` : roadName;
+
+  // Find existing section by name (case-insensitive) or create it
+  let roadSection = await db.roadSection.findFirst({
     where: { name: { equals: sectionName, mode: "insensitive" } },
   });
 
-  if (!section) {
-    section = await db.roadSection.create({
-      data: { name: sectionName },
+  if (!roadSection) {
+    roadSection = await db.roadSection.create({
+      data: {
+        name: sectionName,
+        state,
+        district,
+        city: district,
+        roadType,
+      },
     });
   }
 
-  const sectionId = section.id;
+  const sectionId = roadSection.id;
+
+  // If a contractor name was provided, link it
+  if (contractorName && !roadSection.contractorId) {
+    const contractor = await db.contractor.findFirst({
+      where: { name: { equals: contractorName, mode: "insensitive" } },
+    });
+    if (contractor) {
+      await db.roadSection.update({
+        where: { id: sectionId },
+        data: { contractorId: contractor.id },
+      });
+    }
+  }
 
   // Handle optional photo upload
   let photoUrl: string | null = null;
@@ -69,7 +100,6 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await photoFile.arrayBuffer());
     const result = await processUpload(buffer, photoFile.name);
     photoUrl = result.url;
-    // Prefer EXIF GPS over manually entered coordinates
     if (result.latitude != null) gpsLat = result.latitude;
     if (result.longitude != null) gpsLon = result.longitude;
   }
@@ -88,7 +118,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Recompute aggregate score for this section
     const agg = await tx.rating.aggregate({
       where: { sectionId },
       _avg: { score: true },
@@ -106,7 +135,6 @@ export async function POST(req: NextRequest) {
     return newRating;
   });
 
-  // Bust the Next.js cache for pages that display this data
   revalidatePath("/browse");
   revalidatePath(`/browse/${sectionId}`);
   revalidatePath("/leaderboard");
