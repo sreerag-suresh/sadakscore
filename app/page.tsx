@@ -1,8 +1,22 @@
 import Link from "next/link";
+import { db } from "@/lib/db";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+async function getStats() {
+  const [ratingsCount, sectionsCount, contractorsCount] = await Promise.all([
+    db.rating.count(),
+    db.roadSection.count(),
+    db.contractor.count(),
+  ]);
+  return { ratingsCount, sectionsCount, contractorsCount };
+}
+
+export default async function HomePage() {
+  const { ratingsCount, sectionsCount, contractorsCount } = await getStats();
+
   return (
-    <div className="mx-auto max-w-xl px-6 py-20 text-center">
+    <div className="mx-auto max-w-2xl px-6 py-20 text-center">
       <p className="mb-4 font-mono text-xs font-semibold uppercase tracking-[0.15em] text-stone-400">
         Citizen-powered road accountability
       </p>
@@ -36,9 +50,9 @@ export default function HomePage() {
       {/* Stats strip */}
       <div className="mt-16 flex rounded-xl bg-stone-50">
         {[
-          { value: "2,847", label: "Ratings submitted" },
-          { value: "342", label: "Road sections" },
-          { value: "89", label: "Contractors tracked" },
+          { value: ratingsCount.toLocaleString(), label: "Ratings submitted" },
+          { value: sectionsCount.toLocaleString(), label: "Road sections" },
+          { value: contractorsCount.toLocaleString(), label: "Contractors tracked" },
         ].map((stat, i) => (
           <div
             key={stat.label}
